@@ -92,9 +92,30 @@ def screen_chunk(chunk: str) -> bool:
     return bool(INJECTION_RE.search(chunk))
 
 
-def process_document_text(text: str) -> tuple[list[tuple[str, bool]], int]:
-    """Returns (chunks with quarantine flags, quarantine count)."""
-    chunks = split_chunks(text)
-    flagged = [(c, screen_chunk(c)) for c in chunks]
-    quarantined = sum(1 for _, q in flagged if q)
-    return flagged, quarantined
+def strip_injections(chunk: str) -> tuple[str, int]:
+    """Remove flagged SENTENCES from a chunk, keeping the legitimate content.
+
+    Returns (clean_text, quarantined_sentence_count). A real document with one
+    hostile paragraph shouldn't lose the whole file — only the hostile lines.
+    """
+    sentences = re.split(r"(?<=[.!?\n])\s+", chunk)
+    kept: list[str] = []
+    quarantined = 0
+    for sentence in sentences:
+        if INJECTION_RE.search(sentence):
+            quarantined += 1
+        else:
+            kept.append(sentence)
+    return " ".join(kept).strip(), quarantined
+
+
+def process_document_text(text: str) -> tuple[list[str], int]:
+    """Returns (clean chunks with hostile sentences stripped, quarantine count)."""
+    clean_chunks: list[str] = []
+    total_quarantined = 0
+    for raw in split_chunks(text):
+        clean, quarantined = strip_injections(raw)
+        total_quarantined += quarantined
+        if len(clean) >= 20:
+            clean_chunks.append(clean)
+    return clean_chunks, total_quarantined

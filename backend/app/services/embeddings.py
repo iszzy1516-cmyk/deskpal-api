@@ -30,14 +30,31 @@ def _stub_embedding(text: str) -> list[float]:
 
 
 def embed_texts(texts: list[str]) -> list[list[float]]:
-    """Embed a batch of texts. Raises RuntimeError if the OpenAI call fails."""
-    if not settings.openai_api_key:
-        return [_stub_embedding(t) for t in texts]
-    from openai import OpenAI
+    """Embed a batch of texts.
 
-    client = OpenAI(api_key=settings.openai_api_key)
-    resp = client.embeddings.create(model=settings.openai_embedding_model, input=texts)
-    return [item.embedding for item in resp.data]
+    Priority: Ollama embedding model (if configured) → OpenAI (if keyed) →
+    deterministic hash stub for offline dev/tests.
+    """
+    if settings.ollama_embed_model:
+        import httpx
+
+        out = []
+        for text in texts:
+            resp = httpx.post(
+                f"{settings.ollama_base_url}/api/embeddings",
+                json={"model": settings.ollama_embed_model, "prompt": text},
+                timeout=60,
+            )
+            resp.raise_for_status()
+            out.append(resp.json()["embedding"])
+        return out
+    if settings.openai_api_key:
+        from openai import OpenAI
+
+        client = OpenAI(api_key=settings.openai_api_key)
+        resp = client.embeddings.create(model=settings.openai_embedding_model, input=texts)
+        return [item.embedding for item in resp.data]
+    return [_stub_embedding(t) for t in texts]
 
 
 def cosine(a: list[float], b: list[float]) -> float:

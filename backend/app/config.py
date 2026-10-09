@@ -20,6 +20,15 @@ class Settings(BaseSettings):
     openai_embedding_model: str = "text-embedding-3-small"
     openai_chat_model: str = "gpt-4o-mini"
 
+    # LLM provider: "stub" (offline fallback), "ollama" (local Qwen), or
+    # "openai". Local-first: Ollama runs Qwen with zero per-token cost.
+    chat_provider: str = "stub"
+    ollama_base_url: str = "http://localhost:11434"
+    ollama_chat_model: str = "qwen3.5:9b"
+    # Empty = stub embeddings (hash-based). Set to e.g. "nomic-embed-text"
+    # after `ollama pull nomic-embed-text` for real semantic retrieval.
+    ollama_embed_model: str = ""
+
     max_upload_mb: int = 10
     storage_dir: str = "./storage"
 

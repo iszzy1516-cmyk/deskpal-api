@@ -23,31 +23,26 @@ def process_document(document_id: int) -> None:
         doc.status = "processing"
         db.commit()
 
-        flagged, quarantined = process_document_text(doc.content_text)
-        doc.quarantined_chunks = quarantined
+        clean_chunks, quarantined = process_document_text(doc.content_text)
+        doc.quarantined_chunks = quarantined  # quarantined hostile sentences
 
-        # Embed only the clean chunks; quarantined ones are stored flagged so
-        # they stay auditable but can never be retrieved.
-        clean = [content for content, is_bad in flagged if not is_bad]
-        vectors = embeddings.embed_texts(clean) if clean else []
+        vectors = embeddings.embed_texts(clean_chunks) if clean_chunks else []
 
         db.query(Chunk).filter(Chunk.document_id == doc.id).delete()
-        vec_iter = iter(vectors)
-        for idx, (content, is_bad) in enumerate(flagged):
-            chunk = Chunk(
+        for idx, (content, vec) in enumerate(zip(clean_chunks, vectors)):
+            db.add(Chunk(
                 document_id=doc.id,
                 bot_id=doc.bot_id,
                 org_id=doc.org_id,
                 chunk_index=idx,
                 content=content,
-                quarantined=is_bad,
-                embedding=None if is_bad else embeddings.dumps_vector(next(vec_iter)),
-            )
-            db.add(chunk)
+                quarantined=False,  # hostile sentences were stripped, not stored
+                embedding=embeddings.dumps_vector(vec),
+            ))
 
-        doc.status = "ready" if clean else "failed"
+        doc.status = "ready" if clean_chunks else "failed"
         db.commit()
-        log.info("document %s processed: %d chunks, %d quarantined", doc.id, len(flagged), quarantined)
+        log.info("document %s processed: %d chunks, %d hostile sentences quarantined", doc.id, len(clean_chunks), quarantined)
     except Exception:
         db.rollback()
         doc = db.get(Document, document_id)

@@ -12,7 +12,7 @@ from sqlalchemy.orm import Session
 from app.config import get_settings
 from app.models import Bot, Chunk, Message
 from app.schemas import SourceCitation
-from app.services import embeddings
+from app.services import embeddings, llm
 
 settings = get_settings()
 
@@ -38,7 +38,7 @@ def retrieve(bot: Bot, question: str, db: Session) -> list[Chunk]:
         .filter(Chunk.bot_id == bot.id, Chunk.quarantined.is_(False), Chunk.embedding.isnot(None))
         .all()
     )
-    if settings.openai_api_key:
+    if settings.ollama_embed_model or settings.openai_api_key:
         question_vec = embeddings.embed_texts([question])[0]
         scored = []
         for chunk in candidates:
@@ -94,19 +94,10 @@ def build_prompt(chunks: list[Chunk]) -> list[dict]:
     ]
 
 
-def answer_with_openai(question: str, chunks: list[Chunk]) -> str:
-    from openai import OpenAI
-
-    client = OpenAI(api_key=settings.openai_api_key)
+def answer_with_llm(question: str, chunks: list[Chunk]) -> str:
     messages = build_prompt(chunks)
     messages.append({"role": "user", "content": question})
-    resp = client.chat.completions.create(
-        model=settings.openai_chat_model,
-        messages=messages,
-        temperature=0.2,
-        max_tokens=300,
-    )
-    return resp.choices[0].message.content.strip()
+    return llm.chat(messages)
 
 
 def fallback_answer(chunks: list[Chunk]) -> str:
@@ -126,8 +117,8 @@ def chat(bot: Bot, org_id: int, question: str, db: Session) -> tuple[str, list[S
     if not chunks:
         answer = NO_DOCUMENTS_ANSWER
         used_documents = False
-    elif settings.openai_api_key:
-        answer = answer_with_openai(question, chunks)
+    elif llm.chat_available():
+        answer = answer_with_llm(question, chunks)
         used_documents = True
     else:
         answer = fallback_answer(chunks)

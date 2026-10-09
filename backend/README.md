@@ -17,6 +17,7 @@ documents, with source citations.
 | Upload security | extension allow-list, 10MB cap, content sanity check |
 | Prompt-injection defense | chunks screened at index time (suspicious chunks quarantined, never retrieved) + system prompt declares documents are data, never instructions |
 | Never-hallucinate rule | no relevant chunks → the bot says so and offers a human handoff |
+| LLM | Local-first **Qwen via Ollama** (`CHAT_PROVIDER=ollama`); OpenAI or stub as fallbacks |
 | Headers | CORS allow-list, `nosniff`, `X-Frame-Options: DENY`, Referrer-Policy, CSP |
 | Container | non-root user in the Dockerfile |
 
@@ -38,7 +39,7 @@ export JWT_SECRET=$(openssl rand -hex 32)
 uvicorn app.main:app --reload
 ```
 
-Without `OPENAI_API_KEY` the API runs in **stub mode**: deterministic fake
+With no API key and no Ollama, the API runs in **stub mode**: deterministic fake
 embeddings + lexical retrieval, so the full pipeline works offline. Set a key
 to get real semantic retrieval + GPT answers.
 
